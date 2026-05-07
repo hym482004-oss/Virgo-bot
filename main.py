@@ -1,94 +1,107 @@
+from aiogram import Bot, Dispatcher
+from aiogram.types import Message
+from aiogram.filters import CommandStart
+import asyncio
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
+
 from parser import calculate_bets, get_market_rate
 
+load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-def detect_market_name(text):
-    t = text.lower()
 
-    if any(x in t for x in ['du', 'dubai', 'ဒူ']):
-        return "Dubai"
+def detect_market(text):
+    text = text.lower()
 
-    if any(x in t for x in ['mega', 'me']):
-        return "Mega"
+    names = {
+        "du": "Dubai",
+        "dubai": "Dubai",
+        "ဒူ": "Dubai",
 
-    if any(x in t for x in ['max', 'maxi']):
-        return "Max"
+        "mega": "Mega",
+        "me": "Mega",
 
-    if any(x in t for x in ['lao']):
-        return "Laos"
+        "max": "Max",
+        "maxi": "Max",
 
-    if any(x in t for x in ['ld', 'london']):
-        return "London"
+        "lao": "Laos",
+        "ld": "London",
+        "london": "London",
 
-    if any(x in t for x in ['mm']):
-        return "Myanmar"
+        "mm": "Myanmar",
 
-    if any(x in t for x in ['glo', 'global']):
-        return "Global"
+        "glo": "Global",
+        "global": "Global"
+    }
+
+    for k, v in names.items():
+        if k in text:
+            return v
 
     return None
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
+@dp.message(CommandStart())
+async def start(message: Message):
+    await message.reply("2D Bot Ready ✅")
+
+
+@dp.message()
+async def handle(message: Message):
+
+    text = message.text
+
+    total = calculate_bets(text)
+
+    if total == 0:
         return
 
-    user_text = update.message.text
+    market_name = detect_market(text)
 
-    total_sum = calculate_bets(user_text)
-
-    if total_sum == 0:
-        return
-
-    market_name = detect_market_name(user_text)
-
-    # 2D name မပါရင် admin mention
+    # market name မပါရင် admin mention
     if not market_name:
-        admins = await context.bot.get_chat_administrators(update.effective_chat.id)
+        admins = await bot.get_chat_administrators(message.chat.id)
 
         mentions = []
+
         for admin in admins:
             user = admin.user
-            mentions.append(f"[{user.first_name}](tg://user?id={user.id})")
+            if user.username:
+                mentions.append(f"@{user.username}")
 
-        await update.message.reply_text(
-            " ".join(mentions) + "\nဒါလေးလာစစ်ပေးပါရှင့်",
-            parse_mode="Markdown"
-        )
+        if mentions:
+            await message.reply(
+                " ".join(mentions) +
+                "\nဒါလေးလာစစ်ပေးပါရှင့်"
+            )
         return
 
-    user = update.effective_user
+    rate, percent_text = get_market_rate(text)
 
-    rate, rate_str = get_market_rate(user_text)
+    cashback = int(total * rate)
+    final_total = total - cashback
 
-    cashback = int(total_sum * rate)
-    final_total = total_sum - cashback
+    username = message.from_user.full_name
 
-    response = (
-        f"👤 {user.first_name}\n"
+    reply_text = (
+        f"👤 {username}\n"
         f"2D name = {market_name}\n"
-        f"Total = {total_sum:,} ကျပ်\n"
-        f"{rate_str} Cash Back = {cashback:,} ကျပ်\n"
+        f"Total = {total:,} ကျပ်\n"
+        f"{percent_text} Cash Back = {cashback:,} ကျပ်\n"
         f"လွဲရမည့်ငွေ = {final_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
         f"ကံကောင်းပါစေ 🍀"
     )
 
-    await update.message.reply_text(response)
+    await message.reply(reply_text)
 
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
+async def main():
+    await dp.start_polling(bot)
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & (~filters.COMMAND),
-            handle_message
-        )
-    )
 
-    app.run_polling(drop_pending_updates=True)
+asyncio.run(main())

@@ -4,32 +4,24 @@ import re
 def get_market_rate(text):
     t = text.lower()
 
-    if any(x in t for x in ['dubai', 'ဒူ', 'du']):
-        return 0.07, "7%"
-    if any(x in t for x in ['mega', 'me', 'မီ', 'mega']):
-        return 0.07, "7%"
-    if any(x in t for x in ['max', 'maxi', 'မက်']):
-        return 0.07, "7%"
-    if any(x in t for x in ['lao', 'ld', 'london']):
-        return 0.07, "7%"
-    if any(x in t for x in ['mm']):
-        return 0.10, "10%"
-    if any(x in t for x in ['global', 'glo']):
-        return 0.03, "3%"
+    if any(x in t for x in ['dubai', 'ဒူ', 'du']): return 0.07, "7%"
+    if any(x in t for x in ['mega', 'me', 'မီ']): return 0.07, "7%"
+    if any(x in t for x in ['maxi', 'max', 'မက်']): return 0.07, "7%"
+    if any(x in t for x in ['lao', 'ld', 'london']): return 0.07, "7%"
+    if any(x in t for x in ['mm']): return 0.10, "10%"
+    if any(x in t for x in ['global', 'glo']): return 0.03, "3%"
 
     return 0.07, None
 
 
 # ================= CLEAN =================
-def normalize(text):
-    return text.lower()
-
-
 def extract_amount(line):
-    m = re.search(r'r(\d+)', line)
-    if m:
-        return int(m.group(1)), True  # R amount
+    # R case
+    r_match = re.search(r'r(\d+)', line)
+    if r_match:
+        return int(r_match.group(1)), True
 
+    # normal amount (last number)
     m = re.search(r'(\d+)$', line)
     if m:
         return int(m.group(1)), False
@@ -37,12 +29,14 @@ def extract_amount(line):
     return 0, False
 
 
-# ================= CORE ENGINE =================
+# ================= MAIN ENGINE =================
 def calculate_bets(text):
 
-    text = normalize(text)
+    text = text.lower()
 
+    # normalize symbols
     text = text.replace('*', ' ').replace('/', ' ').replace('.', ' ').replace('=', ' ').replace('-', ' ')
+
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
     total = 0
@@ -55,18 +49,15 @@ def calculate_bets(text):
             continue
 
         # ================= KHWE =================
-        if any(x in line for x in ['ခွေပူး', 'ခပ', 'အခွေပူး']):
+        if any(x in line for x in ['ခွေပူး', 'ခပ', 'အပူး', 'ခွေ']):
             nums = re.findall(r'\d+', line)
             n = len(nums)
-            count = n * n
-            total += count * amt
-            found = True
-            continue
 
-        if any(x in line for x in ['ခွေ', 'ခ', 'အခွေ']):
-            nums = re.findall(r'\d+', line)
-            n = len(nums)
-            count = n * (n - 1)
+            if any(x in line for x in ['ခွေပူး', 'ခပ', 'အပူး']):
+                count = n * n
+            else:
+                count = n * (n - 1)
+
             total += count * amt
             found = True
             continue
@@ -83,55 +74,6 @@ def calculate_bets(text):
             continue
 
         # ================= TOP =================
-        if any(x in line for x in ['ထိပ်', 'ထ', 'top', 't']):
+        if any(x in line for x in ['ထိပ်', 'top', 't']):
             total += 10 * amt
             found = True
-            continue
-
-        # ================= BRAKE =================
-        if any(x in line for x in ['ဘရိတ်', 'bk']):
-            total += 10 * amt
-            found = True
-            continue
-
-        if any(x in line for x in ['စုံဘရိတ်', 'စဘရိတ်']):
-            total += 50 * amt
-            found = True
-            continue
-
-        # ================= POWER / NK =================
-        if any(x in line for x in ['ပါဝါ', 'pw', 'ပဝ']):
-            total += 10 * amt
-            found = True
-            continue
-
-        if any(x in line for x in ['နက္ခတ်', 'nk']):
-            total += 10 * amt
-            found = True
-            continue
-
-        # ================= BRO =================
-        if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို']):
-            total += 20 * amt
-            found = True
-            continue
-
-        # ================= SET (25) =================
-        if any(x in line for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ']):
-            mult = 2 if is_r else 1
-            total += 25 * amt * mult
-            found = True
-            continue
-
-        # ================= SINGLE NUMBERS (fallback) =================
-        nums = re.findall(r'\d{2}', line)
-
-        if nums:
-            if is_r:
-                total += len(nums) * amt * 2
-            else:
-                total += len(nums) * amt
-
-            found = True
-
-    return total if found else 0

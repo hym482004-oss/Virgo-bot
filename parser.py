@@ -1,57 +1,54 @@
-import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
-from parser import calculate_bets, get_market_rate
+import re
 
-TOKEN = "8759881745:AAEu7PQ3RjOmw-NMk29GQhczEPeT20TZJaQ"
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    if not user_text: return
-    text_lower = user_text.lower()
-
-    # "2d" မပါရင် ဘာမှမလုပ်ဘူး (Group စကားပြောမနှောင့်ယှက်ဖို့)
-    if "2d" not in text_lower and "mega" not in text_lower and "du" not in text_lower:
-        return
-
-    # Market % စစ်ဆေးခြင်း
-    rate, rate_str = get_market_rate(user_text)
+def get_market_rate(text):
+    t = text.lower()
+    # Market keywords and rates
+    if any(x in t for x in ['dubai', 'ဒူ', 'du']): return 0.07, "7%"
+    if any(x in t for x in ['mega', 'me', 'မီ', 'mega']): return 0.07, "7%"
+    if any(x in t for x in ['maxi', 'max', 'မက်ဆီ', 'မက်စီ', 'စီစီ']): return 0.07, "7%"
+    if any(x in t for x in ['lao', 'loa', 'loadon', 'laodon', 'လာလာ', 'လာအို']): return 0.07, "7%"
+    if any(x in t for x in ['london', 'လန်လန်', 'လန်ဒန်', 'ld']): return 0.07, "7%"
+    if any(x in t for x in ['mm']): return 0.10, "10%"
+    if any(x in t for x in ['global', 'ဂလို', 'glo']): return 0.03, "3%"
     
-    if rate is None:
-        # Market မပါရင် Admin/Owner ကို Mention ခေါ်မယ်
-        try:
-            admins = await update.effective_chat.get_administrators()
-            mention_msg = "ဒါလေးလာစစ်ပေးပါရှင့် "
-            for admin in admins:
-                if not admin.user.is_bot:
-                    mention_msg += f"@{admin.user.username} "
-            await update.message.reply_text(mention_msg)
-        except:
-            await update.message.reply_text("Market name (Du, Me, Glo...) ထည့်ပေးပါဦး")
-        return
+    # Market နာမည်ရှာမတွေ့ရင် 7% လို့ပဲ သတ်မှတ်ပြီး Admin ခေါ်ဖို့ Return ပြန်မယ်
+    return 0.07, None 
 
-    # တွက်ချက်ခြင်း
-    total_sum = calculate_bets(user_text)
+def calculate_bets(text):
+    lines = text.split('\n')
+    lines.reverse() # အောက်က amount ကို အပေါ်ကယူသုံးဖို့
     
-    if total_sum == 0:
-        await update.message.reply_text("ပြန်စစ်ပေးပါရှင့်")
-        return
+    total_sum = 0
+    current_amt = 0
+    valid_found = False
 
-    # Result ထုတ်ပြန်ခြင်း
-    cashback_amt = int(total_sum * rate)
-    net_total = total_sum - cashback_amt
-    user_name = update.effective_user.first_name
-    
-    response = (
-        f"👤 {user_name}\n"
-        f"Total = {total_sum:,} ကျပ်\n"
-        f"{rate_str} Cash Back = {cashback_amt:,} ကျပ်\n"
-        f"Total = {net_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
-        f"ကံကောင်းပါစေ"
-    )
-    await update.message.reply_text(response)
+    for line in lines:
+        line = line.strip().lower()
+        if not line or any(x in line for x in ['2d', 'total', 't=', 'cashback']): continue
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling(drop_pending_updates=True)
+        # Amount ရှာခြင်း (Line အဆုံးက ဂဏန်း)
+        amt_match = re.search(r'(\d+)$', line)
+        if amt_match:
+            current_amt = int(amt_match.group(1))
+        
+        if current_amt == 0: continue
+
+        # --- တွက်ချက်မှု Logic များ ---
+        # (အပေါ်က parser logic အတိုင်း အပြည့်အစုံ ပြန်ထည့်ပါ)
+        # ၁။ ပတ်သီး/အပါ
+        # ၂။ အကပ်/ကို
+        # ၃။ အခွေ/ခွေပူး
+        # ၄။ ဒဲ့ နှင့် R (ဈေးကွဲ 600R400)
+        
+        # ဥပမာ ဒဲ့/R အတွက်:
+        numbers = re.findall(r'\d{2}', line)
+        if numbers:
+            r_val = re.search(r'r(\d+)', line)
+            d_val = re.search(r'(\d+)r', line)
+            d_amt = int(d_val.group(1)) if d_val else current_amt
+            total_sum += len(numbers) * d_amt
+            if r_val: total_sum += len(numbers) * int(r_val.group(1))
+            elif 'r' in line: total_sum += len(numbers) * d_amt
+            valid_found = True
+
+    return total_sum

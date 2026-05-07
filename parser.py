@@ -9,72 +9,105 @@ def get_market_rate(text):
     return 0.07, None
 
 def calculate_bets(text):
-    text = text.lower().replace('*', ' ').replace('/', ' ').replace('.', ' ').replace('=', ' ').replace('-', ' ')
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    # သင်္ကေတများကို space ဖြတ်ခြင်း
+    for s in ['*', '-', "'", '/', '.', '=', '။']:
+        text = text.replace(s, ' ')
     
+    lines = [l.strip() for l in text.lower().split('\n') if l.strip()]
     total = 0
     found = False
 
     for line in lines:
-        if any(x in line for x in ['total', 'cash', 'တွက်', '2d']): continue
+        if any(x in line for x in ['total', 'cash', '2d', 'ဘဲလွဲ']): continue
         
-        amt_match = re.findall(r'\d+', line)
-        if not amt_match: continue
-        amt = int(amt_match[-1])
+        # Amount ရှာဖွေခြင်း (ဈေးကွဲ 500R250 ကို အရင်စစ်)
+        price_diff = re.search(r'(\d+)\s*r\s*(\d+)', line)
+        all_nums = re.findall(r'\d+', line)
+        if not all_nums: continue
 
-        # တစ်ကြောင်းထဲမှာ Keyword အစုံပါရင် ပေါင်းတွက်ဖို့အတွက်
-        line_total_count = 0
-        
-        # --- ညီကို (Patterns အလိုက်တွက်နည်း) ---
-        if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို']):
-            line_total_count += 20
+        if price_diff:
+            d_amt = int(price_diff.group(1))
+            r_amt = int(price_diff.group(2))
+        else:
+            d_amt = int(all_nums[-1])
+            r_amt = d_amt
 
-        # --- ပါဝါ / နက္ခတ် / အပူး / ထိပ် / ဘရိတ် / ဆယ် ---
-        ten_keys = {
-            'power': ['ပါဝါ', 'pw', 'ပဝ'],
-            'nk': ['နက္ခတ်', 'nk', 'နက'],
-            'double': ['အပူး', 'ပူး'],
-            'top': ['ထိပ်', 'ထ', 't'],
-            'bk': ['ဘရိတ်', 'bk'],
-            'ten': ['ဆယ်']
-        }
-        
-        for key, patterns in ten_keys.items():
-            if any(p in line for p in patterns):
-                if key == 'bk':
-                    n_part = line.split('bk')[0]
-                    n_count = len(re.findall(r'\d', n_part))
-                    line_total_count += (n_count if n_count > 0 else 1) * 10
-                else:
-                    line_total_count += 10
+        is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
+        line_valid = False
+        l_count = 0
 
-        # --- ခွေပူး / ခွေ ---
-        if any(x in line for x in ['ခွေပူး', 'ခပ', 'အခွေပူး']):
-            nums = re.search(r'(\d{3,10})', line)
-            if nums:
-                n = len(nums.group(1))
-                line_total_count += (n * n)
+        # --- (6) အပူးပါခွေ / ခွေပူး (N x N) ---
+        if any(x in line for x in ['ခွေပူး', 'အခွေပူး', 'ပူးပို', 'အပူးပါ', 'အပူးအပြီးပါ']) and any(x in line for x in ['ခွေ', 'ခ']):
+            n_match = re.search(r'(\d{3,10})', line)
+            if n_match:
+                n = len(n_match.group(1))
+                l_count = n * n
+                total += l_count * d_amt
+                line_valid = True
+
+        # --- (5) ခွေ (N x N-1) ---
         elif any(x in line for x in ['ခွေ', 'ခ', 'အခွေ']):
-            nums = re.search(r'(\d{3,10})', line)
-            if nums:
-                n = len(nums.group(1))
-                line_total_count += (n * (n - 1))
+            n_match = re.search(r'(\d{3,10})', line)
+            if n_match:
+                n = len(n_match.group(1))
+                l_count = n * (n - 1)
+                total += l_count * d_amt
+                line_valid = True
 
-        # --- စုံဘရိတ် / စစ / မမ ---
-        if any(x in line for x in ['စုံဘရိတ်', 'စုံbk']):
-            line_total_count += 50
-        if any(x in line for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ']):
-            line_total_count += 25 * (2 if 'r' in line or 'အာ' in line else 1)
+        # --- (9) ကပ် / ကို (a x b) ---
+        if not line_valid and any(x in line for x in ['ကပ်', 'ကို', 'အကပ်']):
+            groups = re.findall(r'\d+', line.split(all_nums[-1])[0])
+            if len(groups) >= 2:
+                l_count = len(groups[0]) * len(groups[1])
+                total += (l_count * d_amt) + (l_count * r_amt if is_r else 0)
+                line_valid = True
 
-        # --- ၂ လုံးတွဲ (ဒဲ့/R) ---
-        # အပေါ်က keyword တွေ တစ်ခုမှ မပါရင် ၂ လုံးတွဲ ရှာမယ်
-        if line_total_count == 0:
-            nums = re.findall(r'(?<!\d)\d{2}(?!\d)', line)
-            if nums:
-                line_total_count += len(nums) * (2 if 'r' in line or 'အာ' in line else 1)
+        # --- (1) ၁၀ ကွက်တန် အုပ်စုများ ---
+        ten_keys = ['ပါဝါ', 'pw', 'power', 'ပဝ', 'နက္ခတ်', 'nk', 'နက', 'နခ', 'ဘရိတ်', 'bk', 'ထိပ်', 'ထ', 'top', 't', 'ပိတ်', 'နောက်', 'အနောက်', 'အပူး', 'ပူး', 'ဆယ်ပြည့်', 'ဆယ်ပြည်', 'ဆယ့်ပြည်']
+        if not line_valid and any(x in line for x in ten_keys):
+            if any(x in line for x in ['ဘရိတ်', 'bk', 'ထိပ်', 'ထ', 'ပိတ်', 'နောက်']):
+                n_match = re.findall(r'\d', line.split(all_nums[-1])[0])
+                l_count = len(n_match) if n_match else 1
+                total += l_count * 10 * d_amt
+            else:
+                total += 10 * d_amt
+            line_valid = True
 
-        if line_total_count > 0:
-            total += line_total_count * amt
-            found = True
+        # --- (11) ၂၀ ကွက်တန် (ညီကို / ပူးပို / ထိပ်ပိတ်) ---
+        twenty_keys = ['ညီကို', 'ညီအကို', 'ညီအစ်ကို', 'ပတ်ပူး', 'ပူးပို', 'ပတ်ပူးပို', 'ပတ်အကွက်20', 'ထန', 'ထပ', 'ထိပ်ပိတ်', 'ထိပ်နောက်']
+        if not line_valid and any(x in line for x in twenty_keys):
+            total += 20 * d_amt
+            line_valid = True
+
+        # --- (10) ၅၀ ကွက်တန် (စုံဘရိတ် / မဘရိတ်) ---
+        if not line_valid and any(x in line for x in ['စုံဘရိတ်', 'စုံbk', 'မbk', 'မဘရိတ်', 'စဘရိတ်']):
+            total += 50 * d_amt
+            line_valid = True
+
+        # --- (8) ၂၅ ကွက်တန် (စစ / မမ / စမ / မစ) ---
+        if not line_valid and any(x in line for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ', 'စုံမ', 'စူံစုံ', 'စုံစူံ']):
+            total += 25 * d_amt * (2 if is_r else 1)
+            line_valid = True
+
+        # --- (4) ၁၉ ကွက်တန် (ပတ်သီး / အပါ) ---
+        if not line_valid and any(x in line for x in ['ပတ်', 'ပါ', 'အပါ', 'ch', 'p']):
+            n_match = re.findall(r'\d', line.split('ပတ်')[0] if 'ပတ်' in line else line)
+            total += (len(n_match) if n_match else 1) * 19 * d_amt
+            line_valid = True
+
+        # --- (7) ၅ ကွက်တန် (စုံပူး / မပူး) ---
+        if not line_valid and any(x in line for x in ['စုံပူး', 'မပူး']):
+            total += 5 * d_amt
+            line_valid = True
+
+        # --- (2, 3) ဒဲ့ / R (၂ လုံးတွဲ) ---
+        if not line_valid:
+            two_digits = re.findall(r'(?<!\d)\d{2}(?!\d)', line)
+            if two_digits:
+                total += len(two_digits) * d_amt
+                if is_r: total += len(two_digits) * r_amt
+                line_valid = True
+
+        if line_valid: found = True
 
     return total if found else 0

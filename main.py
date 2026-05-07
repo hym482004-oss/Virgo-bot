@@ -29,5 +29,5 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    # 'drop_pending_updates' ကို အောက်ပါအတိုင်း အမှန်ပြင်ထားပါတယ်
+    # အမှန်ပြင်ထားပါတယ်
     app.run_polling(drop_pending_updates=True)

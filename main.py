@@ -22,7 +22,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("ပြန်စစ်ပေးပါရှင့်")
         return
 
-    # Market မပါရင် Admin ခေါ်မယ်
     if rate_str is None:
         rate_str = "7%"
         try:
@@ -50,4 +49,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling(drop_polling_updates=True)
+    app.run_polling(drop_pending_updates=True)

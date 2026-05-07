@@ -12,64 +12,106 @@ def get_market_rate(text):
     return 0.07, None 
 
 def calculate_bets(text):
-    lines = text.split('\n')
+    # စာလုံးပေါင်း အမှားအယွင်းခံနိုင်အောင် သန့်စင်ခြင်း
+    text = text.replace('*', ' ').replace('/', ' ').replace('.', ' ').replace('=', ' ').replace('-', ' ')
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    
     total_sum = 0
-    current_amt = 0
     valid_found = False
 
-    # အောက်က amount ကို အပေါ်က ယူသုံးဖို့အတွက် အစီအစဉ်အတိုင်း သွားမယ်
-    # ဒါပေမဲ့ စာကြောင်းတိုင်းမှာ amount ပါ၊ မပါ အရင်စစ်မယ်
-    processed_lines = []
+    # စာကြောင်းတစ်ခုချင်းစီကို Processing လုပ်မယ်
+    processed_data = []
     for line in lines:
-        line = line.strip().lower()
-        if not line or any(x in line for x in ['total', 'cash back', 'ကံကောင်းပါစေ']): continue
+        l = line.lower()
+        if any(x in l for x in ['total', 'cash back', 'ကံကောင်းပါစေ']): continue
         
-        amt_match = re.search(r'(\d+)$', line)
-        line_amt = int(amt_match.group(1)) if amt_match else 0
-        processed_lines.append({'text': line, 'amt': line_amt})
+        # Amount ရှာခြင်း (စာကြောင်းအဆုံးက ဂဏန်း)
+        amt_match = re.search(r'(\d+)$', l)
+        amt = int(amt_match.group(1)) if amt_match else 0
+        processed_data.append({'original': l, 'amt': amt})
 
-    # Amount မပါတဲ့ စာကြောင်းတွေအတွက် အောက်က amount ကို ရှာပေးတဲ့ logic
-    for i in range(len(processed_lines)):
-        if processed_lines[i]['amt'] == 0:
-            for j in range(i + 1, len(processed_lines)):
-                if processed_lines[j]['amt'] > 0:
-                    processed_lines[i]['amt'] = processed_lines[j]['amt']
+    # အောက်က amount ကို အပေါ်က ယူသုံးတဲ့ Logic
+    for i in range(len(processed_data)):
+        if processed_data[i]['amt'] == 0:
+            for j in range(i + 1, len(processed_data)):
+                if processed_data[j]['amt'] > 0:
+                    processed_data[i]['amt'] = processed_data[j]['amt']
                     break
 
-    for item in processed_lines:
-        line = item['text']
+    for item in processed_data:
+        line = item['original']
         amt = item['amt']
         if amt == 0: continue
 
-        # 1. ဒဲ့ နှင့် R (ဈေးကွဲစစ်ခြင်း)
-        numbers = re.findall(r'\d{2}', line)
-        if numbers:
-            r_val_match = re.search(r'r(\d+)', line)
-            d_val_match = re.search(r'(\d+)r', line)
-            
-            d_amt = int(d_val_match.group(1)) if d_val_match else amt
-            total_sum += len(numbers) * d_amt
-            
-            if r_val_match:
-                total_sum += len(numbers) * int(r_val_match.group(1))
-            elif 'r' in line:
-                total_sum += len(numbers) * d_amt # R ဆိုရင် ဒဲ့ဈေးအတိုင်း တစ်ဆထပ်ပေါင်း
-            valid_found = True
-            continue
+        # --- တွက်ချက်မှု Logic များ ---
+        
+        # 1. ကပ် / ကို (e.g. 234ကို678ကပ်)
+        if any(x in line for x in ['ကပ်', 'ကို']):
+            nums = re.findall(r'\d+', line)
+            if len(nums) >= 2:
+                count = len(nums[0]) * len(nums[1])
+                mult = 2 if 'r' in line or 'အာ' in line else 1
+                total_sum += count * amt * mult
+                valid_found = True; continue
 
-        # 2. ပတ်သီး / အပါ / Ch / P
-        if any(x in line for x in ['ပတ်', 'အပါ', 'ပါ', 'ch', 'p']):
+        # 2. ပတ်သီး / အပါ / ပါ / Ch / P
+        if any(x in line for x in ['ပတ်', 'ပါ', 'အပါ', 'ch', 'p']):
+            nums = re.findall(r'\d', line.split('ပတ်')[0] if 'ပတ်' in line else line)
+            # ပတ်ပူး / ၂၀ ကွက် စစ်ခြင်း
+            count = 20 if any(x in line for x in ['ပူးပို', '၂၀', '20', 'ထန', 'ထပ', 'ထိပ်ပိတ်', 'ထိပ်နောက်']) else 19
+            total_sum += len(nums) * count * amt
+            valid_found = True; continue
+
+        # 3. ထိပ် / ဘရိတ် / ဆယ်ပြည့် / အပူး / ပါဝါ / နက္ခတ် (၁၀ ကွက်တန်များ)
+        ten_keys = ['ထိပ်', 'ထ', 'top', 't', 'ဘရိတ်', 'bk', 'ဆယ်', 'အပူး', 'ပူး', 'ပဝ', 'pw', 'power', 'နက္ခတ်', 'nk']
+        if any(x in line for x in ten_keys):
             nums = re.findall(r'\d', line)
-            count = 20 if any(x in line for x in ['ပူးပို', '၂၀', '20', 'ပတ်ပူး']) else 19
-            total_sum += (len(nums[:-1]) if len(nums) > 1 else 1) * count * amt
-            valid_found = True
+            count = len(nums) if len(nums) > 0 else 1
+            total_sum += count * 10 * amt
+            valid_found = True; continue
 
-        # 3. အခွေ / အခွေပူး
-        elif any(x in line for x in ['ခွေ', 'ခ']):
-            nums = re.findall(r'\d', re.split(r'[ခခွေ]', line)[0])
+        # 4. ညီကို (၂၀ ကွက်)
+        if 'ညီကို' in line or 'ညီအကို' in line:
+            total_sum += 20 * amt
+            valid_found = True; continue
+
+        # 5. စစ / မမ / စမ / မစ (၂၅ ကွက်)
+        if any(x in line for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ', 'စုံမ']):
+            mult = 2 if 'r' in line or 'အာ' in line else 1
+            total_sum += 25 * amt * mult
+            valid_found = True; continue
+
+        # 6. စုံဘရိတ် / မဘရိတ် (၅၀ ကွက်)
+        if 'ဘရိတ်' in line and any(x in line for x in ['စုံ', 'မ']):
+            total_sum += 50 * amt
+            valid_found = True; continue
+
+        # 7. ခွေ / အခွေ / ခ
+        if any(x in line for x in ['ခွေ', 'ခ']):
+            nums = re.findall(r'\d', line.split('ခ')[0])
             n = len(nums)
             if n > 1:
-                total_sum += (n * n if any(x in line for x in ['ပူး', 'ခပ']) else n * (n-1)) * amt
-                valid_found = True
+                if any(x in line for x in ['ပူး', 'အပူးပါ']): # ခွေပူး (n*n)
+                    total_sum += (n * n) * amt
+                else: # ခွေ (n * n-1)
+                    total_sum += (n * (n - 1)) * amt
+                valid_found = True; continue
+
+        # 8. ဒဲ့ နှင့် R (ဈေးကွဲ 500R250 ကိုပါ တွက်သည်)
+        numbers = re.findall(r'\d{2}', line)
+        if numbers:
+            r_amt_match = re.search(r'r(\d+)', line)
+            # ဈေးကွဲရှိရင် (e.g. 500R250)
+            if r_amt_match:
+                d_amt = int(re.search(r'(\d+)r', line).group(1)) if re.search(r'(\d+)r', line) else amt
+                r_amt = int(r_amt_match.group(1))
+                total_sum += len(numbers) * (d_amt + r_amt)
+            # R ပဲ ပါရင် (၂ ဆ)
+            elif 'r' in line or 'အာ' in line:
+                total_sum += len(numbers) * amt * 2
+            # ဒဲ့ ပဲ ဆိုရင် (၁ ဆ)
+            else:
+                total_sum += len(numbers) * amt
+            valid_found = True
 
     return total_sum if valid_found else 0

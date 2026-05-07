@@ -1,107 +1,39 @@
-from aiogram import Bot, Dispatcher
-from aiogram.types import Message
-from aiogram.filters import CommandStart
-import asyncio
 import os
-from dotenv import load_dotenv
-
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from parser import calculate_bets, get_market_rate
 
-load_dotenv()
+TOKEN = os.getenv("TOKEN")
 
-TOKEN = os.getenv("BOT_TOKEN")
-
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-
-
-def detect_market(text):
-    text = text.lower()
-
-    names = {
-        "du": "Dubai",
-        "dubai": "Dubai",
-        "ဒူ": "Dubai",
-
-        "mega": "Mega",
-        "me": "Mega",
-
-        "max": "Max",
-        "maxi": "Max",
-
-        "lao": "Laos",
-        "ld": "London",
-        "london": "London",
-
-        "mm": "Myanmar",
-
-        "glo": "Global",
-        "global": "Global"
-    }
-
-    for k, v in names.items():
-        if k in text:
-            return v
-
-    return None
-
-
-@dp.message(CommandStart())
-async def start(message: Message):
-    await message.reply("2D Bot Ready ✅")
-
-
-@dp.message()
-async def handle(message: Message):
-
-    text = message.text
-
-    total = calculate_bets(text)
-
-    if total == 0:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
         return
 
-    market_name = detect_market(text)
+    user_text = update.message.text
+    total_sum = calculate_bets(user_text)
 
-    # market name မပါရင် admin mention
-    if not market_name:
-        admins = await bot.get_chat_administrators(message.chat.id)
-
-        mentions = []
-
-        for admin in admins:
-            user = admin.user
-            if user.username:
-                mentions.append(f"@{user.username}")
-
-        if mentions:
-            await message.reply(
-                " ".join(mentions) +
-                "\nဒါလေးလာစစ်ပေးပါရှင့်"
-            )
+    if total_sum <= 0:
         return
 
-    rate, percent_text = get_market_rate(text)
+    user = update.effective_user
+    rate, rate_label = get_market_rate(user_text)
 
-    cashback = int(total * rate)
-    final_total = total - cashback
+    cashback = int(total_sum * rate)
+    net_total = total_sum - cashback
 
-    username = message.from_user.full_name
-
-    reply_text = (
-        f"👤 {username}\n"
-        f"2D name = {market_name}\n"
-        f"Total = {total:,} ကျပ်\n"
-        f"{percent_text} Cash Back = {cashback:,} ကျပ်\n"
-        f"လွဲရမည့်ငွေ = {final_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
-        f"ကံကောင်းပါစေ 🍀"
+    response = (
+        f"👤 {user.first_name}\n"
+        f"Total = {total_sum:,} ကျပ်\n"
+        f"{rate_label} Cash Back = {cashback:,} ကျပ်\n"
+        f"Total = {net_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
+        f"ကံကောင်းပါစေ"
     )
 
-    await message.reply(reply_text)
+    await update.message.reply_text(response)
 
-
-async def main():
-    await dp.start_polling(bot)
-
-
-asyncio.run(main())
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    )
+    app.run_polling()

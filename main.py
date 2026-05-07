@@ -7,40 +7,34 @@ TOKEN = "8759881745:AAEu7PQ3RjOmw-NMk29GQhczEPeT20TZJaQ"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
-    
     user_text = update.message.text
-    text_lower = user_text.lower()
-
-    if '2d' not in text_lower and 'me' not in text_lower and 'du' not in text_lower:
-        return
-
+    
+    # Market & Calculation
     rate, rate_str = get_market_rate(user_text)
     total_sum = calculate_bets(user_text)
     
     if total_sum == 0:
-        if '2d' in text_lower:
+        # 2d သို့မဟုတ် market name တစ်ခုခုပါမှ reply ပြန်မယ်
+        if any(x in user_text.lower() for x in ['2d', 'du', 'me', 'mm', 'glo']):
             await update.message.reply_text("ပြန်စစ်ပေးပါရှင့်")
         return
 
+    # Market မပါရင် Default 7% နဲ့ Admin ကို Mention ခေါ်မယ်
     if rate_str is None:
         rate_str = "7%"
         try:
             admins = await update.effective_chat.get_administrators()
-            mention_msg = "ဒါလေးလာစစ်ပေးပါရှင့် "
-            for admin in admins:
-                if not admin.user.is_bot:
-                    mention_msg += f"@{admin.user.username} "
-            await update.message.reply_text(mention_msg)
+            mention = " ".join([f"@{a.user.username}" for a in admins if not a.user.is_bot])
+            await update.message.reply_text(f"ဒါလေးလာစစ်ပေးပါရှင့် {mention}")
         except: pass
 
-    cashback_amt = int(total_sum * rate)
-    net_total = total_sum - cashback_amt
-    user_name = update.effective_user.first_name
+    cashback = int(total_sum * rate)
+    net_total = total_sum - cashback
     
     response = (
-        f"👤 {user_name}\n"
+        f"👤 {update.effective_user.first_name}\n"
         f"Total = {total_sum:,} ကျပ်\n"
-        f"{rate_str} Cash Back = {cashback_amt:,} ကျပ်\n"
+        f"{rate_str} Cash Back = {cashback:,} ကျပ်\n"
         f"Total = {net_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
         f"ကံကောင်းပါစေ"
     )

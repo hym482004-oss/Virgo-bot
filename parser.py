@@ -2,47 +2,85 @@ import re
 
 def get_market_rate(text):
     t = text.lower()
-    # Market keywords and rates
     if any(x in t for x in ['dubai', 'ဒူ', 'du']): return 0.07, "7%"
-    if any(x in t for x in ['mega', 'me', 'မီ', 'me', 'mega']): return 0.07, "7%"
+    if any(x in t for x in ['mega', 'me', 'မီ', 'mega']): return 0.07, "7%"
     if any(x in t for x in ['maxi', 'max', 'မက်ဆီ', 'မက်စီ', 'စီစီ']): return 0.07, "7%"
     if any(x in t for x in ['lao', 'loa', 'loadon', 'laodon', 'လာလာ', 'လာအို']): return 0.07, "7%"
     if any(x in t for x in ['london', 'လန်လန်', 'လန်ဒန်', 'ld']): return 0.07, "7%"
     if any(x in t for x in ['mm']): return 0.10, "10%"
     if any(x in t for x in ['global', 'ဂလို', 'glo']): return 0.03, "3%"
-    
-    return None, None # Market နာမည် ရှာမတွေ့ရင်
+    return None, None
 
 def calculate_bets(text):
     lines = text.split('\n')
-    total_amount = 0
-    valid_bet_found = False
+    lines.reverse() # အောက်က amount ကို အပေါ်ကယူသုံးဖို့ reverse လုပ်မယ်
     
+    total_sum = 0
+    current_amt = 0
+    valid_found = False
+
     for line in lines:
         line = line.strip().lower()
-        if not line or any(x in line for x in ['2d', 'total']): continue
+        if not line or any(x in line for x in ['2d', 'total', 't=', 'cashback']): continue
 
-        # Amount ရှာခြင်း (Line အဆုံးက ဂဏန်း)
+        # Amount ရှာခြင်း
         amt_match = re.search(r'(\d+)$', line)
-        if not amt_match: continue
-        final_amt = int(amt_match.group(1))
+        if amt_match:
+            current_amt = int(amt_match.group(1))
+        
+        if current_amt == 0: continue
 
-        # --- တွက်နည်းများ (အကျဉ်းချုပ်) ---
-        # ဒဲ့ နှင့် R (12R500 သို့မဟုတ် 12 500 R250)
-        numbers = re.findall(r'\d{2}', line)
-        if numbers:
-            r_amt_match = re.search(r'r(\d+)', line)
-            d_amt_match = re.search(r'(\d+)r', line)
-            d_amt = int(d_amt_match.group(1)) if d_amt_match else final_amt
-            total_amount += len(numbers) * d_amt
-            if r_amt_match:
-                total_amount += len(numbers) * int(r_amt_match.group(1))
-            elif 'r' in line:
-                total_amount += len(numbers) * d_amt
-            valid_bet_found = True
+        # 1. ပတ်သီး / အပါ / Ch / P (၁၉ သို့မဟုတ် ၂၀ ကွက်)
+        if any(x in line for x in ['ပတ်', 'အပါ', 'ပါ', 'ch', 'p']):
+            nums = re.findall(r'\d', line)
+            count = 20 if any(x in line for x in ['ပူးပို', '၂၀', '20', 'ပတ်ပူး']) else 19
+            total_sum += len(nums[:-1] if len(nums) > 1 else [1]) * count * current_amt
+            valid_found = True
             continue
 
-        # Keywords တွက်နည်းများ (ပတ်၊ ခွေ၊ ဘရိတ်...) - အပေါ်က logic အတိုင်း ဆက်သွားမယ်
-        # ... (Parser logic full version)
-        
-    return total_amount if valid_bet_found else 0
+        # 2. အကပ် / ကို (e.g., 2479/385016 ကပ်)
+        if any(x in line for x in ['ကပ်', 'ကို']):
+            parts = re.findall(r'\d+', line)
+            if len(parts) >= 2:
+                base_count = len(parts[0]) * len(parts[1])
+                # ဈေးကွဲ R ပါရင် (e.g., 100r50)
+                r_val = re.search(r'r(\d+)', line)
+                d_val = re.search(r'(\d+)r', line)
+                d_amt = int(d_val.group(1)) if d_val else current_amt
+                total_sum += base_count * d_amt
+                if r_val: total_sum += base_count * int(r_val.group(1))
+                elif 'r' in line: total_sum += base_count * d_amt
+                valid_found = True
+            continue
+
+        # 3. အခွေ / အခွေပူး / ခပ
+        if any(x in line for x in ['ခွေ', 'ခ']):
+            nums = re.findall(r'\d', re.split(r'[ခခွေ]', line)[0])
+            n = len(nums)
+            if n > 1:
+                if any(x in line for x in ['ပူး', 'ခပ']): total_sum += (n * n * current_amt)
+                else: total_sum += (n * (n - 1) * current_amt)
+                valid_found = True
+            continue
+
+        # 4. ၁၀ ကွက်တန် Keyword များ
+        ten_keys = ['ထိပ်', 'ထ', 'top', 't', 'ဘရိတ်', 'bk', 'အပူး', 'ပူး', 'ဆယ်', 'pw', 'nk']
+        if any(x in line for x in ten_keys):
+            # ၂ ထိပ် ၇ ထိပ် လိုမျိုး ပါရင်
+            nums = re.findall(r'\d', line.split('ထိပ်')[0] if 'ထိပ်' in line else line)
+            total_sum += (len(nums[:-1]) if len(nums) > 1 else 1) * 10 * current_amt
+            valid_found = True
+            continue
+
+        # 5. ဒဲ့ နှင့် R (ဈေးကွဲ 600R400 ပါဝင်သည်)
+        numbers = re.findall(r'\d{2}', line)
+        if numbers:
+            r_val = re.search(r'r(\d+)', line)
+            d_val = re.search(r'(\d+)r', line)
+            d_amt = int(d_val.group(1)) if d_val else current_amt
+            total_sum += len(numbers) * d_amt
+            if r_val: total_sum += len(numbers) * int(r_val.group(1))
+            elif 'r' in line: total_sum += len(numbers) * d_amt
+            valid_found = True
+
+    return total_sum if valid_found else 0

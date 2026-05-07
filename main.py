@@ -1,5 +1,4 @@
 import os
-import re
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from parser import calculate_bets, get_market_rate
@@ -13,35 +12,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_sum = calculate_bets(user_text)
     if total_sum == 0: return
 
-    # User Name ကို Mention ခေါ်ရန်
     user = update.effective_user
-    mention_link = f"[{user.first_name}](tg://user?id={user.id})"
-
     rate, rate_str = get_market_rate(user_text)
     
-    # 2D Name (Du/Me/...) မပါရင် Mention ခေါ်မယ်
-    if rate_str is None:
-        rate_str = "7%"
-        # Mention လင့်ခ်ဖြင့် စာပြန်ခြင်း
-        response = (
-            f"👤 {mention_link}\n"
-            f"Total = {total_sum:,} ကျပ်\n"
-            f"{rate_str} Cash Back = {int(total_sum * 0.07):,} ကျပ်\n"
-            f"Total = {total_sum - int(total_sum * 0.07):,} ကျပ် ဘဲ လွဲပါရှင့်\n"
-            f"ကံကောင်းပါစေ"
-        )
-        await update.message.reply_text(response, parse_mode='Markdown')
-    else:
-        # Market Name ပါရင် ပုံမှန်အတိုင်းပြန်မယ်
-        cashback = int(total_sum * rate)
-        response = (
-            f"👤 {user.first_name}\n"
-            f"Total = {total_sum:,} ကျပ်\n"
-            f"{rate_str} Cash Back = {cashback:,} ကျပ်\n"
-            f"Total = {total_sum - cashback:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
-            f"ကံကောင်းပါစေ"
-        )
-        await update.message.reply_text(response)
+    # Mention Format ပြင်ဆင်ခြင်း
+    mention = f"[{user.first_name}](tg://user?id={user.id})"
+    
+    # Market Name မပါရင် Mention ခေါ်မယ် (Markdown သုံးရမယ်)
+    is_mention = True if rate_str is None else False
+    display_name = mention if is_mention else user.first_name
+    rate_label = rate_str if rate_str else "7%"
+    
+    cashback = int(total_sum * (rate if rate else 0.07))
+    net_total = total_sum - cashback
+    
+    response = (
+        f"👤 {display_name}\n"
+        f"Total \= {total_sum:,} ကျပ်\n"
+        f"{rate_label} Cash Back \= {cashback:,} ကျပ်\n"
+        f"Total \= {net_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
+        f"ကံကောင်းပါစေ"
+    )
+    
+    # MarkdownV2 မှာ Special characters တွေကို escape လုပ်ဖို့လိုလို့ \= သုံးထားပါတယ်
+    await update.message.reply_text(response, parse_mode='MarkdownV2')
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()

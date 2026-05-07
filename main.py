@@ -55,9 +55,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         # Reply function သုံးပြီး မူရင်းစာကို ပြန်ဖြေပေးမည်
         await update.message.reply_text(response)
-
+        
 if __name__ == '__main__':
-    print("Bot is starting with provided Token...")
+    print("Bot is starting...")
+    # Application ကို ဆောက်တဲ့နေရာမှာ အောက်ကအတိုင်း အသေသပ်ပြင်လိုက်ပါ
     app = ApplicationBuilder().token(TOKEN).build()
+    
+    # Message handler ထည့်ခြင်း
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling()
+    
+    # Error မတက်အောင် run_polling ကို ဒီအတိုင်းပဲ ထားပါ
+    app.run_polling(drop_pending_updates=True)
+

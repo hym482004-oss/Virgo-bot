@@ -9,17 +9,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     user_text = update.message.text
     
-    rate, rate_str = get_market_rate(user_text)
     total_sum = calculate_bets(user_text)
-    
-    if total_sum == 0:
-        if any(x in user_text.lower() for x in ['2d', 'du', 'me', 'mm', 'glo']):
-            await update.message.reply_text("ပြန်စစ်ပေးပါရှင့်")
-        return
+    if total_sum == 0: return
 
-    if rate_str is None:
-        rate_str = "7%"
-
+    rate, rate_str = get_market_rate(user_text)
+    rate_str = rate_str if rate_str else "7%"
     cashback = int(total_sum * rate)
     net_total = total_sum - cashback
     
@@ -35,5 +29,5 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    # Error တက်နေတဲ့ parameter ကို ပြင်ထားတယ်
+    # 'drop_pending_updates' ကို အောက်ပါအတိုင်း အမှန်ပြင်ထားပါတယ်
     app.run_polling(drop_pending_updates=True)

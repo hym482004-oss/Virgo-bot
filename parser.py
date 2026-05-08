@@ -1,92 +1,100 @@
 import re
 
-def get_market_rate(text):
-    t = text.lower()
-    if any(x in t for x in ['dubai', 'ဒူ', 'du', 'mega', 'me', 'မီ', 'max', 'maxi', 'မက်', 'lao', 'ld', 'london']):
+def get_market_data(text):
+    text = text.lower()
+    if any(x in text for x in ['mm']): return 0.10, "10%"
+    if any(x in text for x in ['glo', 'global', 'ဂလို']): return 0.03, "3%"
+    if any(x in text for x in ['du', 'dubai', 'ဒူ', 'me', 'mega', 'မီ', 'max', 'maxi', 'မက်', 'ld', 'london', 'lao', 'laos']): 
         return 0.07, "7%"
-    if 'mm' in t: return 0.10, "10%"
-    if 'glo' in t: return 0.03, "3%"
-    return 0.07, "7%"
+    return 0.07, "7%" # Default 7%
 
-def calculate_bets(text):
-    # စာကြောင်းရှည်ကြီးတွေကို အပိုင်းပိုင်းခွဲရလွယ်အောင် clean လုပ်မယ်
-    text = text.replace('=', ' ').replace('-', ' ').replace(',', ' ').replace('။', ' ')
-    lines = [l.strip() for l in text.lower().split('\n') if l.strip()]
-    
+def calculate_2d(text):
+    lines = text.lower().split('\n')
     grand_total = 0
-    pending_units = 0 
-
+    
     for line in lines:
-        if any(x in line for x in ['total', 'cash', '2d', 'ဘဲလွဲ', 'ကံကောင်း']): continue
+        line = line.strip()
+        if not line or any(x in line for x in ['total', 'cash', 'ဘဲလွဲ']): continue
         
-        # 1. Amount ကို အရင်ဆုံး ရှာထုတ်မယ်
-        amt_match = re.search(r'(?:r|R| )?(\d{3,10})$', line)
-        amt = int(amt_match.group(1)) if amt_match else 0
-        prefix = line.replace(amt_match.group(0), "").strip() if amt_match else line
+        # Split separators: space, -, =, *, /, ., :, 
+        parts = re.split(r'[ \-=*/.:]+', line)
+        parts = [p for p in parts if p]
         
-        if not prefix and amt > 0: # Amount ပဲပါတဲ့စာကြောင်းဆိုရင်
-            grand_total += pending_units * amt
-            pending_units = 0
-            continue
-
-        line_unit = 0
-        is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
-        num_blocks = re.findall(r'\d+', prefix)
-        all_digits = "".join(num_blocks)
+        # Amount detection (Last number and R amount)
+        r_amount = 0
+        normal_amount = 0
         
-        # 2. Keyword တစ်ခုထက်ပိုပါရင် အကုန်ပေါင်းတွက်မည့် Logic
-        
-        # [Group 11] 50 Blocks
-        if any(x in prefix for x in ['စုံဘရိတ်', 'မဘရိတ်', 'စဘရိတ်', 'စုံbk', 'မbk']):
-            line_unit += 50
-        
-        # [Group 9] 25 Blocks
-        if any(x in prefix for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ', 'စုံမ']):
-            line_unit += 25
-
-        # [Group 1] 20 Blocks
-        if any(x in prefix for x in ['ညီကို', 'ညီအကို', 'ပတ်ပူး', 'ပူးပို', 'ထန', 'ထပ', 'ထိပ်ပိတ်']):
-            line_unit += 20
-
-        # [Group 5] 19 Blocks (ဂဏန်းအလုံးရေအလိုက် မြှောက်မယ်)
-        if any(x in prefix for x in ['ပတ်သီး', 'အပါ', 'ပတ်', 'ပါ', 'ch', 'p']) and 'ပတ်ပူး' not in prefix:
-            line_unit += len(all_digits) * 19
-
-        # [Group 2] 10 Blocks (Keyword အစုံပါရင် အကုန်ပေါင်းမယ်)
-        kw_10 = ['ပါဝါ', 'ပဝ', 'pw', 'နက္ခတ်', 'nk', 'နက', 'နခ', 'ဘရိတ်', 'bk', 'ထိပ်', 'ပိတ်', 'အပူး', 'ဆယ်ပြည့်']
-        for kw in kw_10:
-            if kw in prefix:
-                multiplier = len(num_blocks) if num_blocks else 1
-                line_unit += multiplier * 10
-
-        # [Group 6, 7] ခွေ / ခွေပူး
-        if any(x in prefix for x in ['ခွေပူး', 'အခွေပူး', 'အပူးပါ', 'ခပ']):
-            n = len(all_digits)
-            line_unit += n * n
-        elif any(x in prefix for x in ['ခွေ', 'အခွေ', 'ခ']):
-            n = len(all_digits)
-            line_unit += n * (n - 1)
-
-        # [Group 10] ကပ်/ကို
-        if any(x in prefix for x in ['ကပ်', 'အကပ်', 'ကို']):
-            if len(num_blocks) >= 2:
-                line_unit += len(num_blocks[0]) * len(num_blocks[1])
-                if is_r: line_unit *= 2
-
-        # [Group 3, 4] ဒဲ့ / R
-        # Keyword တခြားဟာတွေ မပါမှ ဒဲ့/R တွက်မယ်
-        if line_unit == 0:
-            two_digits = re.findall(r'\d{2}', prefix)
-            if two_digits:
-                line_unit += len(two_digits) * (2 if is_r else 1)
-            else:
-                line_unit += len(all_digits) * (2 if is_r else 1)
-
-        # 3. Final Calculation
-        if amt > 0:
-            grand_total += (pending_units + line_unit) * amt
-            pending_units = 0
+        # Check for R amount (e.g., R250 or 500R250)
+        r_match = re.search(r'r(\d+)', line)
+        if r_match:
+            r_amount = int(r_match.group(1))
+            # Remove the R part to find normal amount
+            line_no_r = line[:r_match.start()].strip()
+            norm_match = re.search(r'(\d+)$', line_no_r)
+            normal_amount = int(norm_match.group(1)) if norm_match else r_amount
         else:
-            pending_units += line_unit
+            # No R specifically marked with amount, take last number
+            last_num_match = re.findall(r'\d+', line)
+            if last_num_match:
+                normal_amount = int(last_num_match[-1])
+                if any(x in line for x in ['r', 'အာ']):
+                    r_amount = normal_amount
 
-    return grand_total, []
+        # Counting Logic
+        cells = 0
+        is_r = any(x in line for x in ['r', 'အာ'])
+        
+        # 1. Fixed Groups (50, 25, 20, 19, 10, 5)
+        if any(x in line for x in ['စုံဘရိတ်', 'စုံbk', 'မbk', 'မဘရိတ်', 'စဘရိတ်']):
+            cells = 50
+        elif any(x in line for x in ['စမ', 'စစ', 'မမ', 'စုံစုံ', 'စုံမ', 'မစုံ']):
+            cells = 25 * (2 if is_r else 1)
+        elif any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို', 'ပတ်ပူး', 'ပူးပို', 'ပတ်ပူးပို', 'ထန်', 'ထပ်', 'ထိပ်ပိတ်', 'ထိပ်နောက်']):
+            cells = 20
+        elif any(x in line for x in ['ပတ်သီး', 'အပါ', 'ပတ်', 'ပါ', 'p', 'ch']):
+            nums = re.findall(r'\d+', prefix_only(line, normal_amount, r_amount))
+            cells = len("".join(nums)) * 19
+        elif any(x in line for x in ['ဆယ်ပြည့်', 'ဆယ်ပြည်', 'ဆယ့်ပြည်', 'အပူး', 'အပူးစုံ', 'ပါဝါ', 'pw', 'power', 'နက္ခတ်', 'nk', 'နက်', 'နခ']):
+            cells = 10
+        elif any(x in line for x in ['ထိပ်', 'ထ', 'top', 't', 'ပိတ်', 'အပိတ်', 'နောက်', 'အနောက်', 'ဘရိတ်', 'bk']):
+            nums = re.findall(r'\d+', prefix_only(line, normal_amount, r_amount))
+            cells = len("".join(nums)) * 10
+        elif any(x in line for x in ['စုံပူး', 'မပူး', 'စပူး']):
+            cells = 5
+            
+        # 2. Variable Groups (ခွေ, ခွေပူး, ကပ်)
+        elif any(x in line for x in ['ခွေပူး', 'အပူးပါ', 'အပူးအပြီးပါ', 'ပူး']) and 'ပတ်ပူး' not in line:
+            n = len("".join(re.findall(r'\d+', prefix_only(line, normal_amount, r_amount))))
+            cells = n * n
+        elif any(x in line for x in ['ခွေ', 'အခွေ', 'ခ']):
+            n = len("".join(re.findall(r'\d+', prefix_only(line, normal_amount, r_amount))))
+            cells = n * (n - 1)
+        elif any(x in line for x in ['ကပ်', 'အကပ်', 'ကို']):
+            groups = re.findall(r'\d+', prefix_only(line, normal_amount, r_amount))
+            if len(groups) >= 2:
+                cells = len(groups[0]) * len(groups[1])
+                if is_r: cells *= 2
+        
+        # 3. Direct / R (ဂဏန်းအလုံးရေအလိုက်)
+        else:
+            nums = re.findall(r'\d{2}', prefix_only(line, normal_amount, r_amount))
+            if not nums: # Single digit check
+                single = re.findall(r'^\d{1}$', prefix_only(line, normal_amount, r_amount))
+                if single: return "error"
+                nums = re.findall(r'\d', prefix_only(line, normal_amount, r_amount))
+            
+            cells = len(nums)
+            # တွက်ချက်မှု - Normal နဲ့ R ခွဲတွက်ခြင်း
+            line_total = (cells * normal_amount) + (cells * r_amount if is_r and r_amount > 0 else 0)
+            grand_total += line_total
+            continue # Already summed for Direct/R
+
+        # For Keywords with single amount
+        grand_total += cells * normal_amount
+
+    return grand_total
+
+def prefix_only(line, norm, r):
+    # Amount တွေကို ဖယ်ပြီး ကျန်တဲ့ စာသားနဲ့ ဂဏန်းတွေကိုပဲ ယူတယ်
+    clean = line.replace(str(norm), "").replace(str(r), "").replace('r', '').replace('အာ', '')
+    return clean

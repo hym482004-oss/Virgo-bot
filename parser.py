@@ -7,44 +7,52 @@ def get_market_data(text):
     return 0.07, "7%"
 
 def calculate_2d(text):
-    # separators အစုံကို space ပြောင်းမယ်
-    clean_text = re.sub(r'[/\-=*.,:]', ' ', text.lower())
+    # Separators အားလုံးကို space ပြောင်းပြီး ရှင်းမယ်
+    clean_text = re.sub(r'[/\-=*.,:;]', ' ', text.lower())
     lines = clean_text.split('\n')
     
     grand_total = 0
-    pending_cells = 0 # Amount မပါသေးတဲ့ အကွက်တွေကို စုထားဖို့
+    pending_cells = 0
     
     for line in lines:
         line = line.strip()
-        if not line or any(x in line for x in ['total', 'cash', 'ဘဲလွဲ', 'pm']): continue
+        # Summary စာကြောင်းတွေကို ကျော်မယ်
+        if not line or any(x in line for x in ['total', 'cash', 'ဘဲလွဲ', 'pm', 'စုစုပေါင်း', 'လက်ခံ']): continue
         
-        # 1. Amount Detection
+        # 1. စာကြောင်းရဲ့ အနောက်ဆုံးမှာ ရှိတဲ့ ဂဏန်း (Amount) ကိုပဲ ရှာမယ်
+        # r500, r 500, 500 ဒါမှမဟုတ် 500r250 ပုံစံတွေကို ရှာတာ
         r_amount = 0
         normal_amount = 0
         
-        r_match = re.search(r'r\s?(\d+)', line)
+        # Check for R amount first (e.g., r500)
+        r_match = re.search(r'r\s?(\d+)$', line)
         if r_match:
             r_amount = int(r_match.group(1))
+            # R ရဲ့ ရှေ့က normal amount ကို ရှာမယ် (ဥပမာ 500r250)
             line_pre_r = line[:r_match.start()].strip()
             norm_match = re.search(r'(\d+)$', line_pre_r)
             normal_amount = int(norm_match.group(1)) if norm_match else r_amount
         else:
-            nums = re.findall(r'\d+', line)
-            if nums:
-                normal_amount = int(nums[-1])
+            # R မပါရင် အနောက်ဆုံးက ဂဏန်းကို Amount ယူမယ်
+            all_nums = re.findall(r'\d+', line)
+            if all_nums:
+                normal_amount = int(all_nums[-1])
                 if any(x in line for x in ['r', 'အာ', 'ာ']):
                     r_amount = normal_amount
 
-        # 2. Extract Numbers & Keywords for counting
-        # Amount ကို ဖယ်လိုက်မယ်
-        prefix = line.replace(str(normal_amount), "").replace(str(r_amount), "").replace('r', '')
+        # 2. Amount ကို ဖယ်ပြီး ကျန်တဲ့ prefix ထဲက ဂဏန်းတွေကိုပဲ ရေတွက်မယ်
+        # Amount တွေကို စာကြောင်းအဆုံးကနေပဲ ဖယ်တာမို့ ရှေ့က ဂဏန်းတွေ မပျောက်တော့ဘူး
+        prefix = line
+        if r_amount > 0: prefix = re.sub(rf'r\s?{r_amount}$', '', prefix).strip()
+        if normal_amount > 0: prefix = re.sub(rf'{normal_amount}$', '', prefix).strip()
+
         num_blocks = re.findall(r'\d+', prefix)
         num_str = "".join(num_blocks)
         is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
         
         line_cells = 0
 
-        # --- Keyword Groups ---
+        # --- Keyword Groups Logic ---
         if any(x in line for x in ['စုံဘရိတ်', 'စုံbk', 'မbk', 'မဘရိတ်', 'စဘရိတ်']):
             line_cells = 50
         elif any(x in line for x in ['စစ', 'မမ', 'စမ', 'မစ', 'စုံစုံ', 'စုံမ', 'မစုံ']):
@@ -70,18 +78,19 @@ def calculate_2d(text):
             n = len(num_str)
             line_cells = n * (n - 1)
         else:
-            # Direct/R (2 digits pairs)
+            # ဒဲ့/R (၂ လုံးစီ ခွဲထုတ်မယ်)
             two_digits = re.findall(r'\d{2}', prefix)
             if two_digits:
                 line_cells = len(two_digits)
             elif num_str:
-                line_cells = len(num_str) # Single digits mixed
+                line_cells = len(num_str)
 
-        # 3. Process Calculation
-        if normal_amount > 10: # Amount လို့ ယူဆရတဲ့ ဂဏန်းဖြစ်မှ တွက်မယ်
+        # 3. Calculation
+        if normal_amount > 10: 
             total_at_line = (pending_cells + line_cells)
+            # Normal amount နဲ့ အရင်တွက်မယ်
             grand_total += (total_at_line * normal_amount)
-            # R amount သီးသန့်ရှိရင် ထပ်ပေါင်းမယ်
+            # R amount က normal နဲ့ မတူရင် (ဥပမာ 500r250) r amount နဲ့ ထပ်ပေါင်းတွက်မယ်
             if is_r and r_amount > 0 and r_amount != normal_amount:
                 grand_total += (total_at_line * r_amount)
             

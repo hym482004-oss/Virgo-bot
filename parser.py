@@ -18,57 +18,62 @@ def calculate_bets(text):
     for line in lines:
         if any(x in line for x in ['total', 'cash', '2d', 'ဘဲလွဲ']): continue
         
-        # စာသားထဲက Amount (နောက်ဆုံးဂဏန်း) ကို အရင်ရှာသည်
         all_nums = re.findall(r'\d+', line)
         if not all_nums: continue
-        amt = int(all_nums[-1])
-        
-        # Amount မဟုတ်တဲ့ ကျန်တဲ့ ဂဏန်းတွေကို စုစည်းသည် (ဥပမာ - 156)
-        other_nums_str = "".join(all_nums[:-1])
+        amt = int(all_nums[-1]) # နောက်ဆုံးဂဏန်းကို Amount ယူသည်
         
         line_valid = False
-        unit_count = 0
+        line_count = 0
 
-        # --- STEP 1: Keyword အလိုက် အကွက်အရေအတွက် သတ်မှတ်ခြင်း ---
-        # ၁၀ ကွက်တန်များ
-        if any(x in line for x in ['ပါဝါ', 'pw', 'power', 'ပဝ', 'နက္ခတ်', 'nk', 'နက', 'နခ', 'ဘရိတ်', 'bk', 'ထိပ်', 'ထ', 'ပိတ်', 'အနောက်', 'အပူး', 'ပူး']):
-            unit_count += 10
-            line_valid = True
-        # ၂၀ ကွက်တန်များ
-        if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို', 'ပတ်ပူး', 'ပူးပို', 'ထန', 'ထပ', 'ထိပ်ပိတ်']):
-            unit_count += 20
-            line_valid = True
-        # ၅၀ ကွက်တန်များ
-        if any(x in line for x in ['စုံဘရိတ်', 'မဘရိတ်', 'စဘရိတ်']):
-            unit_count += 50
-            line_valid = True
-        # ၁၉ ကွက်တန် (ပတ်သီး)
-        if any(x in line for x in ['ပတ်', 'ပါ', 'အပါ']) and not any(x in line for x in ['ပတ်ပူး', 'ပူးပို']):
-            unit_count += 19
-            line_valid = True
+        # (6) ခွေပူး / အပူးပါခွေ (n * n)
+        if any(x in line for x in ['ခွေပူး', 'အခွေပူး', 'ပူးပို', 'အပူးပါ']):
+            # Keyword ရှေ့က ဂဏန်းများကို ရှာသည်
+            match = re.search(r'(\d+)\s*(?:ခွေပူး|အခွေပူး|ပူးပို|အပူးပါ)', line)
+            if match:
+                n = len(match.group(1))
+                line_count = n * n
+                line_valid = True
 
-        # --- STEP 2: စုစုပေါင်း တွက်ချက်ခြင်း ---
+        # (5) ခွေ (n * n-1)
+        elif any(x in line for x in ['ခွေ', 'ခ', 'အခွေ']):
+            match = re.search(r'(\d+)\s*(?:ခွေ|ခ|အခွေ)', line)
+            if match:
+                n = len(match.group(1))
+                line_count = n * (n - 1)
+                line_valid = True
+
+        # (4) ပတ်သီး (n * 19)
+        elif any(x in line for x in ['ပတ်', 'ပါ', 'အပါ']) and not any(x in line for x in ['ပတ်ပူး']):
+            match = re.search(r'(\d+)\s*(?:ပတ်|ပါ|အပါ)', line)
+            if match:
+                n = len(match.group(1))
+                line_count = n * 19
+                line_valid = True
+
+        # (1, 11) အခြား Keyword များ (ညီကို၊ ပါဝါ၊ bk)
+        if not line_valid:
+            temp_count = 0
+            if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို']): temp_count += 20
+            if any(x in line for x in ['ပါဝါ', 'pw', 'power']): temp_count += 10
+            if any(x in line for x in ['ဘရိတ်', 'bk']): temp_count += 10
+            
+            if temp_count > 0:
+                # ဂဏန်းအုပ်စု ပါ/မပါ စစ်သည် (ဥပမာ- 156bk)
+                match = re.search(r'(\d+)\s*(?:ညီကို|ပါဝါ|bk|pw|power|ဘရိတ်)', line)
+                multiplier = len(match.group(1)) if match else 1
+                line_count = multiplier * temp_count
+                line_valid = True
+
+        # --- နောက်ဆုံးတွက်ချက်မှု ---
         if line_valid:
-            # အကယ်၍ 156bk လို့ရေးရင် 1, 5, 6 တစ်လုံးချင်းစီအတွက် unit_count နဲ့ မြှောက်မည်
-            group_multiplier = len(other_nums_str) if other_nums_str else 1
-            total += (group_multiplier * unit_count) * amt
+            total += line_count * amt
             found = True
         else:
-            # ခွေ / ခွေပူး Logic (သီးသန့် Formula သုံးသည်)
-            if any(x in line for x in ['ခွေပူး', 'အခွေပူး']):
-                n = len(other_nums_str)
-                total += (n * n) * amt
+            # ဒဲ့ / R (၂ လုံးတွဲ)
+            two_digits = re.findall(r'(?<!\d)\d{2}(?!\d)', line)
+            if two_digits:
+                is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
+                total += len(two_digits) * amt * (2 if is_r else 1)
                 found = True
-            elif any(x in line for x in ['ခွေ', 'ခ', 'အခွေ']):
-                n = len(other_nums_str)
-                total += (n * (n - 1)) * amt
-                found = True
-            else:
-                # ဒဲ့ / R (၂ လုံးတွဲ)
-                two_digits = re.findall(r'(?<!\d)\d{2}(?!\d)', line)
-                if two_digits:
-                    is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
-                    total += len(two_digits) * amt * (2 if is_r else 1)
-                    found = True
 
     return total if found else 0

@@ -9,7 +9,7 @@ def get_market_rate(text):
     return 0.07, "7%"
 
 def calculate_bets(text):
-    # သင်္ကေတများရှင်းလင်းခြင်း
+    # သင်္ကေတများ ရှင်းလင်းခြင်း
     for s in ['*', '-', "'", '/', '.', '=', '။', '+']:
         text = text.replace(s, ' ')
     
@@ -17,53 +17,56 @@ def calculate_bets(text):
     total = 0
     found = False
 
-    for line in lines:
+    for i, line in enumerate(lines):
         if any(x in line for x in ['total', 'cash', '2d', 'ဘဲလွဲ']): continue
         
-        # Line ထဲမှာပါတဲ့ ဂဏန်းအားလုံးကို အရင်ထုတ်သည်
+        # Line ထဲက ဂဏန်းအားလုံး
         nums = re.findall(r'\d+', line)
         if not nums: continue
-        amt = int(nums[-1]) # နောက်ဆုံးဂဏန်းကို Amount အဖြစ်သတ်မှတ်
+        amt = int(nums[-1]) # နောက်ဆုံးဂဏန်းကို Amount ယူသည်
+        
+        # Keyword ရှာရန်အတွက် လက်ရှိစာကြောင်းနဲ့ အပေါ်စာကြောင်းကို ပေါင်းစပ်သည်
+        context_text = lines[i-1] + " " + line if i > 0 else line
         
         line_count = 0
         is_matched = False
 
         # 1. ခွေပူး (n * n)
         if any(x in line for x in ['ခွေပူး', 'အခွေပူး', 'ပူးပို', 'အပူးပါ']):
-            match = re.search(r'(\d+)\s*(?:ခွေပူး|အခွေပူး|ပူးပို|အပူးပါ)', line)
+            match = re.search(r'(\d+)\s*(?:ခွေပူး|အခွေပူး|ပူးပို|အပူးပါ)', context_text)
             n = len(match.group(1)) if match else 0
             line_count = n * n
             is_matched = True
 
         # 2. ခွေ (n * n-1)
         elif any(x in line for x in ['ခွေ', 'ခ', 'အခွေ']):
-            match = re.search(r'(\d+)\s*(?:ခွေ|ခ|အခွေ)', line)
+            match = re.search(r'(\d+)\s*(?:ခွေ|ခ|အခွေ)', context_text)
             n = len(match.group(1)) if match else 0
             line_count = n * (n - 1)
             is_matched = True
 
         # 3. ပတ်သီး (n * 19)
         elif any(x in line for x in ['ပတ်', 'ပါ', 'အပါ']):
-            match = re.search(r'(\d+)\s*(?:ပတ်|ပါ|အပါ)', line)
+            match = re.search(r'(\d+)\s*(?:ပတ်|ပါ|အပါ)', context_text)
             n = len(match.group(1)) if match else 0
             line_count = n * 19
             is_matched = True
 
-        # 4. ၁၀/၂၀ ကွက်တန် Keywords များ (ညီကို၊ ပါဝါ၊ ဘရိတ်)
+        # 4. ၁၀/၂၀ ကွက်တန် Keyword အုပ်စုများ
         if not is_matched:
-            current_unit = 0
-            if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို']): current_unit += 20
-            if any(x in line for x in ['ပါဝါ', 'pw', 'power']): current_unit += 10
-            if any(x in line for x in ['ဘရိတ်', 'bk']): current_unit += 10
+            unit = 0
+            if any(x in line for x in ['ညီကို', 'ညီအကို', 'ညီအစ်ကို']): unit += 20
+            if any(x in line for x in ['ပါဝါ', 'pw', 'power']): unit += 10
+            if any(x in line for x in ['ဘရိတ်', 'bk', 'bk']): unit += 10
             
-            if current_unit > 0:
-                # Keyword ရှေ့မှာ ဂဏန်းတွဲပါသလား စစ်သည် (ဥပမာ - 15bk)
-                match = re.search(r'(\d+)\s*(?:ညီကို|ပါဝါ|bk|pw|power|ဘရိတ်)', line)
+            if unit > 0:
+                # Keyword ရှေ့က ဂဏန်းကို ရှာသည် (Context ထဲမှာရော)
+                match = re.search(r'(\d+)\s*(?:ညီကို|ပါဝါ|bk|pw|power|ဘရိတ်)', context_text)
                 multiplier = len(match.group(1)) if match else 1
-                line_count = current_unit * multiplier
+                line_count = unit * multiplier
                 is_matched = True
 
-        # 5. ဘာ Keyword မှမပါလျှင် ဒဲ့ / R (၂ လုံးတွဲ)
+        # 5. ဘာ Keyword မှမပါရင် ဒဲ့ / R (၂ လုံးတွဲ)
         if not is_matched:
             two_digits = re.findall(r'(?<!\d)\d{2}(?!\d)', line)
             if two_digits:
@@ -71,7 +74,6 @@ def calculate_bets(text):
                 line_count = len(two_digits) * (2 if is_r else 1)
                 is_matched = True
 
-        # စုစုပေါင်းပေါင်းခြင်း
         if is_matched:
             total += line_count * amt
             found = True

@@ -1,30 +1,42 @@
-import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
-from parser import calculate_bets, get_market_rate
+import asyncio
+import logging
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from parser import calculate_2d, get_market_data
 
+# Bot Configuration
 TOKEN = "8759881745:AAF29kI14jlV6oIP771xK5-GtUfHfH0YqDU"
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text: return
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.reply("Shwethoon 2D Calculator Bot မှ ကြိုဆိုပါတယ်ရှင့်။ ✨\nစာရင်းများ ရိုက်ထည့်နိုင်ပါပြီ။")
+
+@dp.message(F.text)
+async def handle_calc(message: types.Message):
+    user_text = message.text
     
-    user_text = update.message.text
-    # parser.py မှ grand_total ကို ယူသည်
-    total_sum, _ = calculate_bets(user_text)
+    # တွက်ချက်ခြင်း
+    result = calculate_2d(user_text)
     
-    if total_sum == 0: return
+    if result == "error":
+        await message.reply("⚠️ ပြန်စစ်ပေးပါရှင့်")
+        return
     
-    user = update.effective_user
-    rate, rate_label = get_market_rate(user_text)
+    if result == 0:
+        return # ဂဏန်းမပါရင် ဘာမှပြန်မလုပ်ဘူး
+
+    # Market & Cashback logic
+    rate, rate_label = get_market_data(user_text)
+    cashback = int(result * rate)
+    net_total = result - cashback
     
-    cashback = int(total_sum * rate)
-    net_total = total_sum - cashback
-    
-    # ရိုးရှင်းသော Output Format
+    # Output Format
     response = (
-        f"👤 {user.first_name}\n"
+        f"👤 {message.from_user.first_name}\n"
         f"--------------------\n"
-        f"စုစုပေါင်း = {total_sum:,} ကျပ်\n"
+        f"စုစုပေါင်း = {result:,} ကျပ်\n"
         f"{rate_label} Cashback = {cashback:,} ကျပ်\n"
         f"--------------------\n"
         f"လက်ခံရမည့်ငွေ = {net_total:,} ကျပ်\n"
@@ -32,9 +44,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"ကံကောင်းပါစေ"
     )
     
-    await update.message.reply_text(response, parse_mode='Markdown')
+    await message.answer(response)
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling(drop_pending_updates=True)
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())

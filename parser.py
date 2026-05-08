@@ -2,12 +2,11 @@ import re
 
 def get_market_rate(text):
     t = text.lower()
-    # Market keywords များစစ်ဆေးခြင်း
     if any(x in t for x in ['dubai', 'ဒူ', 'du', 'mega', 'me', 'မီ', 'max', 'maxi', 'မက်', 'lao', 'ld', 'london']):
         return 0.07, "7%"
     if 'mm' in t: return 0.10, "10%"
     if 'glo' in t: return 0.03, "3%"
-    # ဘာမှမပါရင် Default 7% ပေးထားမည် (TypeError မတက်အောင် 0.07 တိုက်ရိုက်ပြန်ပေးသည်)
+    # Error မတက်အောင် ဘာမှမပါရင်လည်း default 0.07 ပေးထားမည်
     return 0.07, "7%"
 
 def calculate_bets(text):
@@ -25,7 +24,6 @@ def calculate_bets(text):
         r_amt = int(price_diff.group(2)) if price_diff else d_amt
         is_r = any(x in line for x in ['r', 'အာ', 'ာ'])
         line_valid = False
-        
         # (6) အပူးပါခွေ / ခွေပူး
         if any(x in line for x in ['ခွေပူး', 'အခွေပူး', 'ပူးပို', 'အပူးပါ', 'အပူးအပြီးပါ']) and any(x in line for x in ['ခွေ', 'ခ']):
             n_match = re.search(r'(\d{3,10})', line)

@@ -9,24 +9,28 @@ def get_market_rate(text):
     return 0.07, "7%"
 
 def calculate_bets(text):
-    for s in ['*', '-', "'", '/', '.', '=', '။', '+']:
+    # နင်ပြောတဲ့ သင်္ကေတအားလုံးကို Space အဖြစ် ပြောင်းလဲပစ်သည်
+    symbols = ['*', '/', "'", '"', '.', '-', '_', '=', '။', '+', '၊']
+    for s in symbols:
         text = text.replace(s, ' ')
+    
     lines = [l.strip() for l in text.lower().split('\n') if l.strip()]
     total = 0
     found = False
 
     for i, line in enumerate(lines):
         if any(x in line for x in ['total', 'cash', '2d', 'ဘဲလွဲ']): continue
+        
         all_nums = re.findall(r'\d+', line)
         if not all_nums: continue
         amt = int(all_nums[-1])
         
-        # အပေါ်စာကြောင်းနဲ့ လက်ရှိစာကြောင်းကို ပေါင်းစပ်စစ်ဆေးသည်
+        # အပေါ်စာကြောင်းပါ Context အဖြစ် ယူရန်
         context_text = lines[i-1] + " " + line if i > 0 else line
         line_count = 0
         is_matched = False
 
-        # --- KEYWORDS အုပ်စုများ ---
+        # --- KEYWORDS အုပ်စုများ အကုန်အစုံ ---
 
         # ၁။ ခွေပူး / အခွေပူး / ပူးပို / အပူးပါခွေ (Formula: n x n)
         if any(x in line for x in ['ခွေပူး', 'အခွေပူး', 'ပူးပို', 'အပူးပါ', 'အပူးအပြီးပါ']):
@@ -42,9 +46,8 @@ def calculate_bets(text):
             line_count = n * (n - 1)
             is_matched = True
 
-        # ၃။ ကပ် / ကို / အကပ် (Formula: a_len x b_len)
+        # ၃။ ကပ် / ကို / အကပ် (Formula: a x b)
         elif any(x in line for x in ['ကပ်', 'ကို', 'အကပ်']):
-            # ဂဏန်းအုပ်စု ၂ ခု ရှာသည်
             groups = re.findall(r'(\d+)\s*(?:ကပ်|ကို|အကပ်)\s*(\d+)', context_text)
             if groups:
                 line_count = len(groups[0][0]) * len(groups[0][1])
@@ -78,6 +81,7 @@ def calculate_bets(text):
                 unit += 5
             
             if unit > 0:
+                # Keyword ရှေ့မှာ ဂဏန်းတွဲပါသလား စစ်သည်
                 match = re.search(r'(\d+)\s*(?:ပါဝါ|ညီကို|bk|ပတ်ပူး|ပူး|ဘရိတ်|ထိပ်|ပိတ်|စုံ|မ)', context_text)
                 multiplier = len(match.group(1)) if match else 1
                 line_count = unit * multiplier

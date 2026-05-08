@@ -8,7 +8,6 @@ TOKEN = "8759881745:AAF29kI14jlV6oIP771xK5-GtUfHfH0YqDU"
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     user_text = update.message.text
-    
     total_sum = calculate_bets(user_text)
     if total_sum == 0: return
     

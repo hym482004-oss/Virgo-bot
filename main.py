@@ -9,7 +9,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     
     user_text = update.message.text
-    total_sum, lines_data = calculate_bets(user_text)
+    # parser.py မှ grand_total ကို ယူသည်
+    total_sum, _ = calculate_bets(user_text)
     
     if total_sum == 0: return
     
@@ -19,17 +20,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cashback = int(total_sum * rate)
     net_total = total_sum - cashback
     
-    # Line by line output assembly
-    line_report = "\n".join(lines_data)
-    
+    # ရိုးရှင်းသော Output Format
     response = (
         f"👤 {user.first_name}\n"
         f"--------------------\n"
-        f"{line_report}\n"
-        f"--------------------\n"
-        f"Total = {total_sum:,} ကျပ်\n"
+        f"စုစုပေါင်း = {total_sum:,} ကျပ်\n"
         f"{rate_label} Cashback = {cashback:,} ကျပ်\n"
-        f"Total = {net_total:,} ကျပ် ဘဲ လွဲပါရှင့်\n"
+        f"--------------------\n"
+        f"လက်ခံရမည့်ငွေ = {net_total:,} ကျပ်\n"
+        f"--------------------\n"
         f"ကံကောင်းပါစေ"
     )
     

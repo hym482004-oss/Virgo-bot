@@ -8,11 +8,14 @@ TOKEN = "8759881745:AAF29kI14jlV6oIP771xK5-GtUfHfH0YqDU"
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     user_text = update.message.text
+    
     total_sum = calculate_bets(user_text)
     if total_sum == 0: return
+    
     user = update.effective_user
     rate, rate_label = get_market_rate(user_text)
     
+    # Mention formatting
     display_name = f"[{user.first_name}](tg://user?id={user.id})" if not any(x in user_text.lower() for x in ['du', 'me', 'glo']) else user.first_name
     cashback = int(total_sum * rate)
     net_total = total_sum - cashback
